@@ -1,32 +1,31 @@
 from flask import Flask, request, jsonify
-import subprocess
-import json
+import yt_dlp
 import os
 
 app = Flask(__name__)
 
 @app.route("/download")
 def download():
-    url = request.args.get("url")
+    video_id = request.args.get("id")
+    if not video_id:
+        return jsonify({"error": "Missing video ID"}), 400
+
+    url = f"https://www.youtube.com/watch?v={video_id}"
     try:
-        # Use yt-dlp to fetch video info in JSON
-        result = subprocess.run(
-            ["yt-dlp", "-j", url],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-
-        if result.returncode != 0:
-            return jsonify({"error": result.stderr.strip()}), 500
-
-        video_info = json.loads(result.stdout)
-        return jsonify({
-            "title": video_info.get("title"),
-            "video_url": video_info.get("url"),
-            "duration": video_info.get("duration"),
-        })
-
+        ydl_opts = {
+            "quiet": True,
+            "skip_download": True,
+            "forcejson": True
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            return jsonify({
+                "title": info.get("title"),
+                "channel": info.get("uploader"),
+                "duration": info.get("duration"),
+                "url": info.get("webpage_url"),
+                "thumbnail": info.get("thumbnail")
+            })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
