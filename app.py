@@ -1,38 +1,34 @@
-from flask import Flask, request, jsonify, send_file
-import yt_dlp
+from flask import Flask, request, jsonify
+import subprocess
+import json
 import os
 
 app = Flask(__name__)
 
-@app.route("/")
-def home():
-    return "YouTube Downloader API is running (yt-dlp version)"
-
-@app.route("/download", methods=["GET"])
+@app.route("/download")
 def download():
     url = request.args.get("url")
-    if not url:
-        return jsonify({"error": "No URL provided"}), 400
-
     try:
-        output_path = "video.mp4"
-        ydl_opts = {
-            'format': 'bestvideo+bestaudio/best',
-            'outtmpl': output_path,
-            'quiet': True,
-            'merge_output_format': 'mp4'
-        }
+        # Use yt-dlp to fetch video info in JSON
+        result = subprocess.run(
+            ["yt-dlp", "-j", url],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
+        if result.returncode != 0:
+            return jsonify({"error": result.stderr.strip()}), 500
 
-        return send_file(output_path, as_attachment=True)
+        video_info = json.loads(result.stdout)
+        return jsonify({
+            "title": video_info.get("title"),
+            "video_url": video_info.get("url"),
+            "duration": video_info.get("duration"),
+        })
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    finally:
-        if os.path.exists(output_path):
-            os.remove(output_path)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
